@@ -1,62 +1,64 @@
-from http.server import BaseHTTPRequestHandler, HTTPServer
-import urllib.parse
-import sqlite3
+from flask import Flask, render_template, request, redirect, url_for, jsonify
+import json
 
-PORT = 8080
+app = Flask(__name__)
 
-# Ensure DB exists
-def init_db():
-    conn = sqlite3.connect("expenses.db")
-    cursor = conn.cursor()
-    cursor.execute('''CREATE TABLE IF NOT EXISTS expenses (
-                        id INTEGER PRIMARY KEY AUTOINCREMENT,
-                        amount REAL,
-                        category TEXT,
-                        description TEXT,
-                        date TEXT)''')
-    conn.commit()
-    conn.close()
+# Load expenses from JSON file
+def load_expenses():
+    try:
+        with open('expenses.json', 'r') as file:
+            return json.load(file)
+    except (FileNotFoundError, json.JSONDecodeError):
+        return []
 
-class ExpenseHandler(BaseHTTPRequestHandler):
-    def do_GET(self):
-        if self.path == '/':
-            with open('index.html', 'rb') as file:
-                self.send_response(200)
-                self.send_header('Content-type', 'text/html')
-                self.end_headers()
-                self.wfile.write(file.read())
-        elif self.path == '/style.css':
-            with open('style.css', 'rb') as file:
-                self.send_response(200)
-                self.send_header('Content-type', 'text/css')
-                self.end_headers()
-                self.wfile.write(file.read())
+# Save expenses to JSON file
+def save_expenses(expenses):
+    with open('expenses.json', 'w') as file:
+        json.dump(expenses, file, indent=4)
 
-    def do_POST(self):
-        if self.path == '/add':
-            length = int(self.headers['Content-Length'])
-            post_data = self.rfile.read(length)
-            data = urllib.parse.parse_qs(post_data.decode())
+# Home Page (View Expenses)
+@app.route('/')
+def index():
+    expenses = load_expenses()
+    return render_template("index.html", expenses=expenses)
 
-            amount = float(data['amount'][0])
-            category = data['category'][0]
-            description = data['description'][0]
-            date = data['date'][0]
+# Add Expense
+@app.route('/add', methods=['GET', 'POST'])
+def add_expense():
+    if request.method == 'POST':
+        amount = request.form['amount']
+        category = request.form['category']
+        description = request.form['description']
+        date = request.form['date']
 
-            conn = sqlite3.connect("expenses.db")
-            cursor = conn.cursor()
-            cursor.execute("INSERT INTO expenses (amount, category, description, date) VALUES (?, ?, ?, ?)",
-                           (amount, category, description, date))
-            conn.commit()
-            conn.close()
+        expenses = load_expenses()
+        expenses.append({
+            "id": len(expenses) + 1,
+            "amount": float(amount),
+            "category": category,
+            "description": description,
+            "date": date
+        })
 
-            # Redirect back to homepage
-            self.send_response(303)
-            self.send_header('Location', '/')
-            self.end_headers()
+        save_expenses(expenses)
+        return redirect(url_for('index'))
+
+    return render_template("add_expense.html")
+
+# Delete Expense
+@app.route('/delete/<int:id>')
+def delete_expense(id):
+    expenses = load_expenses()
+    updated_expenses = [expense for expense in expenses if expense['id'] != id]
+    save_expenses(updated_expenses)
+    return redirect(url_for('index'))
+
+# Generate Report
+@app.route('/report')
+def generate_report():
+    expenses = load_expenses()
+    total_spent = sum(expense['amount'] for expense in expenses)
+    return render_template("report.html", expenses=expenses, total_spent=total_spent)
 
 if __name__ == '__main__':
-    init_db()
-    server = HTTPServer(('localhost', PORT), ExpenseHandler)
-    print(f"Server running at http://localhost:{PORT}")
-    server.serve_forever()
+    app.run(debug=True)

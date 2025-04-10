@@ -1,17 +1,16 @@
 body {
-  font-family: sans-serif;
-  margin: 40px;
-  background-color: #f9f9f9;
+    font-family: 'Arial', sans-serif;
+    background-color: #f9f9f9;
 }
-form {
-  display: flex;
-  flex-direction: column;
-  max-width: 300px;
+
+h1 {
+    color: #4CAF50;
 }
-input, button {
-  margin: 5px 0;
-  padding: 10px;
+
+.table {
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
 }
-#expense-list {
-  margin-top: 40px;
+
+.btn {
+    margin: 5px;
 }
