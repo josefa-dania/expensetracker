@@ -1,64 +1,134 @@
-from flask import Flask, render_template, request, redirect, url_for, jsonify
+from http.server import BaseHTTPRequestHandler, HTTPServer
+import urllib.parse
+import sqlite3
 import json
+import os
 
-app = Flask(__name__)
+PORT = 8080
+DB_FILE = "expenses.db"
 
-# Load expenses from JSON file
-def load_expenses():
-    try:
-        with open('expenses.json', 'r') as file:
-            return json.load(file)
-    except (FileNotFoundError, json.JSONDecodeError):
-        return []
+def init_db():
+    if not os.path.exists(DB_FILE):
+        conn = sqlite3.connect(DB_FILE)
+        cursor = conn.cursor()
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS expenses (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                amount REAL,
+                category TEXT,
+                description TEXT,
+                date TEXT
+            )
+        ''')
+        conn.commit()
+        conn.close()
 
-# Save expenses to JSON file
-def save_expenses(expenses):
-    with open('expenses.json', 'w') as file:
-        json.dump(expenses, file, indent=4)
+def get_expense_table_html():
+    conn = sqlite3.connect(DB_FILE)
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM expenses")
+    rows = cursor.fetchall()
+    conn.close()
 
-# Home Page (View Expenses)
-@app.route('/')
-def index():
-    expenses = load_expenses()
-    return render_template("index.html", expenses=expenses)
+    if not rows:
+        return "<p>No expenses found.</p>"
 
-# Add Expense
-@app.route('/add', methods=['GET', 'POST'])
-def add_expense():
-    if request.method == 'POST':
-        amount = request.form['amount']
-        category = request.form['category']
-        description = request.form['description']
-        date = request.form['date']
+    html = "<table><tr><th>ID</th><th>Amount</th><th>Category</th><th>Description</th><th>Date</th><th>Action</th></tr>"
+    for r in rows:
+        html += f"<tr><td>{r[0]}</td><td>{r[1]}</td><td>{r[2]}</td><td>{r[3]}</td><td>{r[4]}</td>"
+        html += f"<td><form action='/delete' method='post' style='display:inline'><input type='hidden' name='id' value='{r[0]}'><button type='submit'>Delete</button></form></td></tr>"
+    html += "</table>"
+    return html
 
-        expenses = load_expenses()
-        expenses.append({
-            "id": len(expenses) + 1,
-            "amount": float(amount),
-            "category": category,
-            "description": description,
-            "date": date
-        })
+class ExpenseHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        if self.path == '/':
+            with open('index.html', 'r') as f:
+                html = f.read()
+            html = html.replace("<!-- Table rendered by Python -->", get_expense_table_html())
+            self.send_response(200)
+            self.send_header('Content-type', 'text/html')
+            self.end_headers()
+            self.wfile.write(html.encode())
 
-        save_expenses(expenses)
-        return redirect(url_for('index'))
+        elif self.path == '/style.css':
+            with open('style.css', 'rb') as f:
+                self.send_response(200)
+                self.send_header('Content-type', 'text/css')
+                self.end_headers()
+                self.wfile.write(f.read())
 
-    return render_template("add_expense.html")
+        elif self.path == '/report-data':
+            conn = sqlite3.connect(DB_FILE)
+            cursor = conn.cursor()
+            cursor.execute("SELECT category, SUM(amount) FROM expenses GROUP BY category")
+            data = cursor.fetchall()
+            conn.close()
 
-# Delete Expense
-@app.route('/delete/<int:id>')
-def delete_expense(id):
-    expenses = load_expenses()
-    updated_expenses = [expense for expense in expenses if expense['id'] != id]
-    save_expenses(updated_expenses)
-    return redirect(url_for('index'))
+            categories = [row[0] for row in data]
+            amounts = [row[1] for row in data]
+            response = json.dumps({"categories": categories, "amounts": amounts})
+            self.send_response(200)
+            self.send_header("Content-type", "application/json")
+            self.end_headers()
+            self.wfile.write(response.encode())
 
-# Generate Report
-@app.route('/report')
-def generate_report():
-    expenses = load_expenses()
-    total_spent = sum(expense['amount'] for expense in expenses)
-    return render_template("report.html", expenses=expenses, total_spent=total_spent)
+        else:
+            self.send_response(404)
+            self.end_headers()
+            self.wfile.write(b"404 Not Found")
+
+    def do_POST(self):
+        length = int(self.headers['Content-Length'])
+        post_data = self.rfile.read(length)
+        data = urllib.parse.parse_qs(post_data.decode())
+
+        if self.path == '/add':
+            try:
+                amount = float(data['amount'][0])
+                category = data['category'][0]
+                description = data['description'][0]
+                date = data['date'][0]
+
+                conn = sqlite3.connect(DB_FILE)
+                cursor = conn.cursor()
+                cursor.execute("INSERT INTO expenses (amount, category, description, date) VALUES (?, ?, ?, ?)",
+                               (amount, category, description, date))
+                conn.commit()
+                conn.close()
+
+                self.send_response(303)
+                self.send_header('Location', '/')
+                self.end_headers()
+            except Exception as e:
+                self.send_response(500)
+                self.end_headers()
+                self.wfile.write(f"Error: {str(e)}".encode())
+
+        elif self.path == '/delete':
+            try:
+                expense_id = int(data['id'][0])
+                conn = sqlite3.connect(DB_FILE)
+                cursor = conn.cursor()
+                cursor.execute("DELETE FROM expenses WHERE id = ?", (expense_id,))
+                conn.commit()
+                conn.close()
+
+                self.send_response(303)
+                self.send_header('Location', '/')
+                self.end_headers()
+            except Exception as e:
+                self.send_response(500)
+                self.end_headers()
+                self.wfile.write(f"Error: {str(e)}".encode())
+
+        else:
+            self.send_response(405)
+            self.end_headers()
+            self.wfile.write(b"Method Not Allowed")
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    init_db()
+    print(f"Server running at http://localhost:{PORT}")
+    server = HTTPServer(('localhost', PORT), ExpenseHandler)
+    server.serve_forever()
