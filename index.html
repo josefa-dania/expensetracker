@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Expense Tracker</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="script.js" defer></script>
+  <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+</head>
+<body class="bg-gray-100 min-h-screen flex items-center justify-center p-4">
+  <div class="w-full max-w-2xl space-y-6">
+    <!-- Expense Input -->
+    <div class="bg-white p-6 rounded-xl shadow-md">
+      <h1 class="text-2xl font-bold mb-4">Add Expense</h1>
+      <input id="expenseName" class="w-full border p-2 mb-2 rounded" placeholder="Expense Name">
+      <input id="expenseAmount" type="number" class="w-full border p-2 mb-2 rounded" placeholder="Amount">
+      <select id="expenseCategory" class="w-full border p-2 mb-4 rounded">
+        <option>🍔 Food</option>
+        <option>🏠 Home</option>
+        <option>💼 Work</option>
+        <option>🎉 Fun</option>
+        <option>✨ Misc</option>
+      </select>
+      <button onclick="addExpense()" class="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600">Save Expense</button>
+    </div>
+
+    <!-- Summary -->
+    <div class="bg-white p-6 rounded-xl shadow-md">
+      <h2 class="text-xl font-bold mb-4">Summary</h2>
+      <div id="expenseSummary" class="space-y-2"></div>
+      <p class="font-semibold mt-2" id="totalSpent"></p>
+      <p id="remainingBudget"></p>
+      <p class="text-green-600" id="dailyBudget"></p>
+    </div>
+
+    <!-- Chart -->
+    <div class="bg-white p-6 rounded-xl shadow-md">
+      <h2 class="text-xl font-bold mb-4">Expenses Chart</h2>
+      <canvas id="expenseChart" width="400" height="300"></canvas>
+    </div>
+  </div>
+</body>
+</html>
